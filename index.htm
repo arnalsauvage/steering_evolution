@@ -1,15 +1,169 @@
-<html>
+<!DOCTYPE html>
+<html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <script language="javascript" type="text/javascript" src="libraries/p5.js"></script>
-  <script language="javascript" src="libraries/p5.dom.js"></script>
-  <script language="javascript" src="libraries/p5.sound.js"></script>
-   <script type="text/javascript" src="libraries/soundjs-0.5.0.min.js"></script>
-    <script type="text/javascript" src="libraries/preloadjs-0.4.0.min.js"></script>
-  <script language="javascript" type="text/javascript" src="vehicle.js"></script>
-  <script language="javascript" type="text/javascript" src="sketch.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Steering Lab - Django & Arnal 🎸</title>
+    
+    <script src="libraries/p5.js"></script>
+    <script src="libraries/p5.dom.js"></script>
+    <script src="libraries/p5.sound.js"></script>
+    <script src="libraries/soundjs-0.5.0.min.js"></script>
+    <script src="libraries/preloadjs-0.4.0.min.js"></script>
+    <script src="quadtree.js"></script>
+    <script src="names.js"></script>
+    <script src="vehicle.js"></script>
+    <script src="sketch.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #0a1921;
+            --panel-bg: rgba(15, 32, 39, 0.98);
+            --accent-color: #00ffcc;
+            --text-color: #e0f0f0;
+            --save-color: #ffcc00;
+            --time-color: #ff44aa;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            color: var(--text-color);
+            display: flex; flex-direction: row;
+            height: 100vh; width: 100vw; overflow: hidden;
+        }
+
+        #canvas-holder {
+            flex: 1; background: radial-gradient(circle at center, #1a4a5e 0%, #0a1921 70%, #050b10 100%);
+            display: flex; justify-content: center; align-items: center;
+            touch-action: none; position: relative; overflow: hidden;
+        }
+
+        #ui-panel {
+            width: 320px; min-width: 320px; background: var(--panel-bg);
+            border-left: 1px solid rgba(0, 255, 204, 0.2);
+            padding: 15px; display: flex; flex-direction: column; gap: 8px;
+            overflow-y: auto; box-shadow: -5px 0 30px rgba(0,0,0,0.6);
+            z-index: 10; backdrop-filter: blur(20px);
+        }
+
+        @media (max-width: 900px) {
+            body { flex-direction: column; }
+            #canvas-holder { flex: 2; width: 100vw; }
+            #ui-panel { width: 100vw !important; min-width: 0 !important; flex: 2; border-left: none; border-top: 1px solid rgba(0, 255, 204, 0.2); flex-direction: row; flex-wrap: wrap; padding: 10px; }
+            #ui-panel header, .instructions { display: none; }
+            .legend, .featured-card, #p5-controls, .button-group { flex: 1; min-width: 160px; margin: 0 !important; }
+        }
+
+        h1 { font-size: 1.1rem; color: var(--accent-color); text-transform: uppercase; margin: 0; }
+        .subtitle { font-size: 0.65rem; opacity: 0.5; margin-bottom: 5px; }
+
+        .legend { background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px; }
+        .dna-bar-container { margin-bottom: 4px; }
+        .dna-label { font-size: 0.6rem; opacity: 0.7; display: flex; justify-content: space-between; }
+        .dna-bar { width: 100%; height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; margin-top: 1px; overflow: hidden; }
+        .bar-fill { height: 100%; width: 0%; transition: width 0.3s; }
+
+        .featured-card { background: rgba(0,0,0,0.4); border-radius: 10px; padding: 12px; border: 1px solid rgba(0, 255, 204, 0.2); }
+        #feat-name { font-size: 1.1rem; color: #fff; border-bottom: 1px solid var(--accent-color); padding-bottom: 5px; margin: 0 0 10px 0; font-style: italic; }
+        
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 0.75rem; margin-bottom: 10px; }
+        .stat-line { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .stat-line span { opacity: 0.6; }
+
+        .button-group { display: flex; flex-direction: column; gap: 5px; }
+        .action-button { width: 100%; padding: 10px; border: none; border-radius: 6px; color: #000; font-weight: bold; cursor: pointer; font-size: 0.75rem; transition: 0.2s; text-transform: uppercase; }
+        .btn-focus { background: var(--accent-color); }
+        .btn-save { background: var(--save-color); }
+        .btn-time { background: var(--time-color); color: #fff; }
+        .action-button:hover { filter: brightness(1.2); }
+
+        #p5-controls { font-size: 0.8rem; color: #8899aa; }
+        canvas { display: block; filter: drop-shadow(0 0 15px rgba(0,0,0,0.5)); }
+    </style>
 </head>
 
 <body>
+    <div id="canvas-holder"></div>
+
+    <aside id="ui-panel">
+        <header>
+            <h1>Steering Lab</h1>
+            <div class="subtitle">v2.8 DNA Scanner Star ⭐</div>
+        </header>
+
+        <div class="legend">
+            <div style="font-size: 0.65rem; font-weight: bold; color: var(--accent-color); margin-bottom: 4px;">🌍 ÉCOSYSTÈME</div>
+            <div style="font-size: 0.75rem;"><strong id="season-name">-</strong></div>
+            <div class="dna-bar"><div id="energy-bar" class="bar-fill"></div></div>
+        </div>
+
+        <div class="button-group">
+            <button id="btn-random-focus" class="action-button btn-focus">🔭 Suivre une Star</button>
+            <button id="btn-timelapse" class="action-button btn-time">⏩ Timelapse</button>
+            <div style="display:flex; gap:5px;">
+                <button id="btn-save" class="action-button btn-save" style="flex:1">💾 Sauver</button>
+                <button id="btn-load" class="action-button btn-save" style="flex:1; opacity:0.8">📂 Charger</button>
+            </div>
+        </div>
+
+        <div id="p5-controls"></div>
+
+        <div id="featured-ui" class="featured-card">
+            <h2 id="feat-name">Chargement...</h2>
+            
+            <div class="stat-grid">
+                <div class="stat-line"><span>Vie:</span> <strong id="feat-health">-</strong></div>
+                <div class="stat-line"><span>Gen:</span> <strong id="feat-gen">0</strong></div>
+                <div class="stat-line"><span>Phase:</span> <strong id="feat-phase">-</strong></div>
+                <div class="stat-line"><span>Bagarres:</span> <strong id="feat-fights">0</strong></div>
+                <div class="stat-line"><span>Mariages:</span> <strong id="feat-matings">0</strong></div>
+                <div class="stat-line"><span>Dons:</span> <strong id="feat-solidarity">0</strong></div>
+            </div>
+            
+            <div class="dna-details">
+                <div class="dna-bar-container">
+                    <div class="dna-label"><span>Appétit Food</span> <span id="val-f-w">0</span></div>
+                    <div class="dna-bar"><div id="bar-f-w" class="bar-fill" style="background:#00ff00"></div></div>
+                </div>
+                <div class="dna-bar-container">
+                    <div class="dna-label"><span>Vue Food</span> <span id="val-f-v">0</span></div>
+                    <div class="dna-bar"><div id="bar-f-v" class="bar-fill" style="background:#00ff00; opacity:0.5"></div></div>
+                </div>
+                <div class="dna-bar-container">
+                    <div class="dna-label"><span>Dégoût Poison</span> <span id="val-p-w">0</span></div>
+                    <div class="dna-bar"><div id="bar-p-w" class="bar-fill" style="background:#00aaff"></div></div>
+                </div>
+                <div class="dna-bar-container">
+                    <div class="dna-label"><span>Vue Poison</span> <span id="val-p-v">0</span></div>
+                    <div class="dna-bar"><div id="bar-p-v" class="bar-fill" style="background:#00aaff; opacity:0.5"></div></div>
+                </div>
+                <div class="dna-bar-container">
+                    <div class="dna-label"><span>Appétit Repro</span> <span id="val-r-w">0</span></div>
+                    <div class="dna-bar"><div id="bar-r-w" class="bar-fill" style="background:#ffaa00"></div></div>
+                </div>
+                <div class="dna-bar-container">
+                    <div class="dna-label"><span>Vue Repro</span> <span id="val-r-v">0</span></div>
+                    <div class="dna-bar"><div id="bar-r-v" class="bar-fill" style="background:#ffaa00; opacity:0.5"></div></div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <script>
+        window.onload = function() {
+            const checkContainer = document.querySelector('#p5-controls');
+            const timer = setInterval(() => {
+                const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+                if (checkboxes.length >= 2) {
+                    checkboxes.forEach(cb => checkContainer.appendChild(cb.parentElement));
+                    clearInterval(timer);
+                }
+            }, 100);
+        };
+    </script>
 </body>
 </html>
